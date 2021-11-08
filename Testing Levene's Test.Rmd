@@ -1,0 +1,208 @@
+---
+title: "Testing Levene's Test"
+author: "Art Tay"
+date: "10/19/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+#Set-up Code
+```{r setup, include=FALSE} 
+##Suppress warnings
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+##Load coin package
+library(coin)
+
+##Load Tidyverse Package
+library(tidyverse)
+
+##Load car package
+library(car)
+
+##Load Kable package
+library(kableExtra)
+```
+
+#Abstract
+The goal of this code is to understand the robustness of Levene's Test for determining whether the variance between group is equal. The mechanics of Levene's Test are explained in the Statistical Sleuth on page 103, but as a brief summary: Levene's Test comparies the absolute deviations of each observation from their group median (Z). Then The means of each groups' Z values are compared. If there is no evidence of difference in the mean Z values, the variance of each group is assumed to be equal. The author os Sleuth claim that this test is more robust than the F-test for equal variance and remains powerful even if the data is non-normal. 
+
+#Hypothetical Benefits of Levene's Test
+The problem with the F-test for variance is that it is sensitive to a normality assumption. This is because the F-test is conducted directly on the point estimates for variance. Depending on samples size the variance of a sample can be dramatically different than the distribution in comes from if the population distribution is skewed. Levene's test solves this issue by testing the average deivation from the median instead of square deviations from the mean. This is similiar to rank based non-parameteric tests that avoid normality assumption by testing psudomedians instead. This does beg the question whether any power is lost from this transformation as the value is indirectly being tested. 
+
+#The Simulation 
+
+1. We will first start with two groups of normally distributed data with the same mean. We will vary the standard deviation and compare the resulting p-values from Levene's Test implimented through the car package. 
+
+```{r}
+#Rows 
+sample_Sizes = c(5,10,25,50,100)
+
+#Columns 
+effect_Sizes = c(1,1.1, 1.25, 1.5, 1.75, 2)
+
+#Table 1
+table_1 = c()
+
+for(i in effect_Sizes){
+    #p-value holder 
+    p_c = c()
+    for(j in sample_Sizes){
+      #Loop-control-variable 
+      LCV_1 = 0
+      p_1 = 0
+      for(LCV_1 in 1:100){
+        #Simulates random data. 
+        sample = data.frame(cbind(rnorm(j, sd = i), rnorm(j)))
+        #Corrects data shape to match requirements of method. 
+        sample = sample %>% pivot_longer(cols = colnames(sample), names_to = "Group", values_to = "Data")
+        #Calculates p-value 
+        p_1 = p_1 + leveneTest(sample$Data, as.factor(sample$Group))[1,3]
+      }
+      p_c = append(p_c, p_1/100)
+    }
+    table_1 = cbind(table_1, p_c)
+}
+
+#Format Table 1
+table_1 = data.frame(table_1)
+
+#Column and Row Names
+rownames(table_1) = sample_Sizes
+colnames(table_1) = c("$\\sigma_1 = \\sigma_2$", "$\\sigma_1 = 1.1\\sigma_2$", "$\\sigma_1 = 1.25\\sigma_2$", "$\\sigma_1 = 1.5\\sigma_2$", 
+                      "$\\sigma_1 = 1.75\\sigma_2$", "$\\sigma_1 = 2\\sigma_2$")
+
+kbl(table_1, caption = "<center><strong>Table 1. Average P-Values of Levene's F-Test</strong></center>") %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed")) %>% group_rows("Sample Sizes", 1, 5) %>% kable_classic() %>% 
+  footnote(number = c("The trial size was 100."))
+
+#Table 2
+table_2 = c()
+alpha = 0.1
+
+for(i in effect_Sizes){
+    #p-value holder 
+    r_c = c()
+    for(j in sample_Sizes){
+      #Loop-control-variable 
+      LCV_1 = 0
+      r_1 = 0
+      for(LCV_1 in 1:100){
+        #Simulates random data. 
+        sample = data.frame(cbind(rnorm(j, sd = i), rnorm(j)))
+        #Corrects data shape to match requirements of method. 
+        sample = sample %>% pivot_longer(cols = colnames(sample), names_to = "Group", values_to = "Data")
+        #Calculates rejection  
+        r_1 = r_1 + ifelse(leveneTest(sample$Data, as.factor(sample$Group))[1,3] > alpha, 0, 1) 
+      }
+      r_c = append(r_c, r_1)
+    }
+    table_2 = cbind(table_2, r_c)
+}
+
+#Format Table 2
+table_2 = data.frame(table_2)
+
+#Column and Row Names
+rownames(table_2) = sample_Sizes
+colnames(table_2) = c("$\\sigma_1 = \\sigma_2$", "$\\sigma_1 = 1.1\\sigma_2$", "$\\sigma_1 = 1.25\\sigma_2$", "$\\sigma_1 = 1.5\\sigma_2$", 
+                      "$\\sigma_1 = 1.75\\sigma_2$", "$\\sigma_1 = 2\\sigma_2$")
+
+kbl(table_2, caption = "<center><strong>Table 2. Rejection % at $\\alpha = 0.1$</strong></center>") %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed")) %>% group_rows("Sample Sizes", 1, 5) %>% kable_classic()%>% 
+  footnote(number = c("The trial size was 100.")) %>% add_header_above(c(" " = 1, "Type 1 Error" = 1, "Power" = 5))
+
+```
+
+2. We will now test two groups of normally distributed data with different means.
+
+```{r}
+#Rows 
+sample_Sizes = c(5,10,25,50,100)
+
+#Columns 
+effect_Sizes = c(1,1.1, 1.25, 1.5, 1.75, 2)
+
+#Table 3
+
+#Table 3a (\mu_1 = 1 = \mu_2)
+table_3a = c()
+
+for(i in effect_Sizes){
+    #p-value holder 
+    p_c = c()
+    for(j in sample_Sizes){
+      #Loop-control-variable 
+      LCV_1 = 0
+      p_1 = 0
+      for(LCV_1 in 1:100){
+        #Simulates random data. 
+        sample = data.frame(cbind(rnorm(n = j, sd = i, mean = 1), rnorm(n = j, mean = 1)))
+        #Corrects data shape to match requirements of method. 
+        sample = sample %>% pivot_longer(cols = colnames(sample), names_to = "Group", values_to = "Data")
+        #Calculates p-value 
+        p_1 = p_1 + leveneTest(sample$Data, as.factor(sample$Group))[1,3]
+      }
+      p_c = append(p_c, p_1/100)
+    }
+    table_3a = cbind(table_3a, p_c)
+}
+
+
+#Table 3b (\mu_1 = 2\mu_2)
+table_3b = c()
+
+for(i in effect_Sizes){
+    #p-value holder 
+    p_c = c()
+    for(j in sample_Sizes){
+      #Loop-control-variable 
+      LCV_1 = 0
+      p_1 = 0
+      for(LCV_1 in 1:100){
+        #Simulates random data. 
+        sample = data.frame(cbind(rnorm(n = j, sd = i, mean = 1), rnorm(n = j, mean = 2)))
+        #Corrects data shape to match requirements of method. 
+        sample = sample %>% pivot_longer(cols = colnames(sample), names_to = "Group", values_to = "Data")
+        #Calculates p-value 
+        p_1 = p_1 + leveneTest(sample$Data, as.factor(sample$Group))[1,3]
+      }
+      p_c = append(p_c, p_1/100)
+    }
+    table_3b = cbind(table_3b, p_c)
+}
+
+#Format Table 3a
+table_3a = data.frame(table_3a)
+
+#Column and Row Names
+rownames(table_3a) = sample_Sizes
+colnames(table_3a) = c("$\\sigma_1 = \\sigma_2$", "$\\sigma_1 = 1.1\\sigma_2$", "$\\sigma_1 = 1.25\\sigma_2$", "$\\sigma_1 = 1.5\\sigma_2$", 
+                      "$\\sigma_1 = 1.75\\sigma_2$", "$\\sigma_1 = 2\\sigma_2$")
+
+kbl(table_3a, caption = "<center><strong>Table 3a. Average P-Values of Levene's F-Test $\\mu_1 = 1 = \\mu_2$</strong></center>") %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed")) %>% group_rows("Sample Sizes", 1, 5) %>% kable_classic() %>% 
+  footnote(number = c("The trial size was 100."))
+
+#Format Table 3b
+table_3b = data.frame(table_3b)
+
+#Column and Row Names
+rownames(table_3b) = sample_Sizes
+colnames(table_3b) = c("$\\sigma_1 = \\sigma_2$", "$\\sigma_1 = 1.1\\sigma_2$", "$\\sigma_1 = 1.25\\sigma_2$", "$\\sigma_1 = 1.5\\sigma_2$", 
+                      "$\\sigma_1 = 1.75\\sigma_2$", "$\\sigma_1 = 2\\sigma_2$")
+
+kbl(table_3b, caption = "<center><strong>Table 3b. Average P-Values of Levene's F-Test $\\mu_1 = 2\\mu_2$</strong></center>") %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed")) %>% group_rows("Sample Sizes", 1, 5) %>% kable_classic() %>% 
+  footnote(number = c("The trial size was 100."))
+```
+
+
+3. We will now test two groups of varying their distributions. 
+
+4. We will now test five groups.
+
+5. If I set the threshold to $p > .5 \Rightarrow \text{reject}$ how much does the error rate of ANOVA change. 
